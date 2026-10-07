@@ -69,3 +69,10 @@ def back(message):
 
 print("البوت شغال...")
 bot.infinity_polling()
+# عشان Render ما يطفي البوت
+from flask import Flask
+import threading
+app = Flask('')
+@app.route('/')
+def home(): return "Bot is alive!"
+threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000)).start()
