@@ -1,6 +1,8 @@
 import telebot
 from telebot import types
 import os
+from flask import Flask
+import threading
 
 TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
@@ -16,20 +18,23 @@ CHANNELS = {
 FORM_EMPLOYER = "https://forms.gle/XXXX"
 FORM_SEEKER = "https://forms.gle/YYYY"
 
-WARNING_TEXT = """
-⚠️ تنبيه مهم:
+WARNING_TEXT = """⚠️ تنبيه مهم:
 - كل الوظائف مجانية 100%
 - لا تدفع أي رسوم توظيف
 - نحن منصة عرض فقط
-- لو طلبو منك قروش بلغنا فورا
-"""
+- لو طلبو منك قروش بلغنا فورا"""
 
-@bot.message_handler(commands=['start'])
-def start(message):
+def main_menu():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.add("🔍 أبحث عن وظيفة", "📢 عندي وظيفة - انشر مجانا")
     markup.add("📄 سجل كـ باحث عن عمل", "⚠️ تنبيه هام")
-    bot.send_message(message.chat.id, "🇸🇩 مرحبا بيك في بوت وظائف السودانيين\n\nأكبر تجمع لوظائف السودانيين في الخليج ومصر والسودان\nاختار من القائمة تحت:", reply_markup=markup)
+    return markup
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id,
+        "🇸🇩 مرحبا بيك في بوت وظائف السودانيين\n\nأكبر تجمع لوظائف السودانيين في الخليج ومصر والسودان\nاختار من القائمة تحت:",
+        reply_markup=main_menu())
 
 @bot.message_handler(func=lambda m: m.text == "🔍 أبحث عن وظيفة")
 def jobs_menu(message):
@@ -44,8 +49,8 @@ def send_channel(message):
     city = message.text
     link = CHANNELS[city]
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(f"ادخل قناة {city}", url=link))
-    bot.send_message(message.chat.id, f"✅ وظائف {city} 👇\n{link}", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton(f"ادخل قناة {city} ✅", url=link))
+    bot.send_message(message.chat.id, f"✅ دوس الزر عشان تدخل قناة وظائف {city} 👇", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: m.text == "📢 عندي وظيفة - انشر مجانا")
 def employer_form(message):
@@ -67,12 +72,17 @@ def warning(message):
 def back(message):
     start(message)
 
-print("البوت شغال...")
-bot.infinity_polling()
-# عشان Render ما يطفي البوت
-from flask import Flask
-import threading
+# === ده الحل عشان Render ما يطفي البوت ===
 app = Flask('')
 @app.route('/')
-def home(): return "Bot is alive!"
-threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000)).start()
+def home():
+    return "Bot is alive!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+threading.Thread(target=run_flask).start()
+
+print("البوت شغال...")
+bot.infinity_polling()
