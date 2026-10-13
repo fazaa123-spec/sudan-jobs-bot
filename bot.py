@@ -3,19 +3,41 @@ import re
 import sqlite3
 import logging
 import random
+import threading
 from datetime import datetime, date
+from flask import Flask
 import telebot
 from telebot import types
+
+# === ويب سيرفر عشان Replit ما يطفي ===
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "✅ البوت شغال 24 ساعة - Sudan Jobs Bot"
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+def run_web():
+    # Replit بستخدم بورت 8080
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 logging.basicConfig(level=logging.INFO)
 
 def get_env_config():
-    token = os.getenv("BOT_TOKEN")
+    # في Replit استخدم Secrets
+    token = os.getenv("BOT_TOKEN") or os.getenv("TOKEN")
     admin_id = os.getenv("ADMIN_ID")
-    if not token or not admin_id:
-        print("❌ ضيف BOT_TOKEN و ADMIN_ID في Render > Environment Variables")
+    if not token:
+        print("❌ ضيف BOT_TOKEN في Replit > Secrets (القفل على اليسار)")
         exit(1)
-    return token, int(admin_id)
+    if not admin_id:
+        print("❌ ضيف ADMIN_ID في Secrets")
+        exit(1)
+    return token.strip(), int(admin_id.strip())
 
 TOKEN, ADMIN_ID = get_env_config()
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML", threaded=False)
@@ -39,26 +61,16 @@ TATWEER_TIPS = [
     "📚 <b>كورس مجاني مع شهادة:</b>\nموقع Alison.com فيهو شهادات معتمدة مجانية",
     "🔥 <b>طور سيرتك:</b>\nاعمل CV احترافي في Canva",
     "🎯 <b>قاعدة ذهبية:</b>\nما تقدم بنفس الـ CV لكل الوظائف. عدل الهدف حسب الوظيفة",
-    "💪 <b>تحدي 7 ايام:</b>\nكل يوم اتعلم 20 كلمة انجليزية خاصة بمجالك",
-    "🧠 <b>كسر ملل:</b>\nاتعلم تكتب ايميل رسمي احترافي",
-    "💼 <b>سر المقابلات:</b>\nقبل المقابلة اكتب في يوتيوب 'اسئلة مقابلة + اسم وظيفتك'",
-    "🚀 <b>حركة سمحة:</b>\nصور فيديو 30 ثانية تعرف فيهو عن نفسك عربي/انجليزي"
 ]
 
-# === قاعدة البيانات مع اصلاح تلقائي ===
 conn = sqlite3.connect("jobs.db", check_same_thread=False)
 conn.execute("""CREATE TABLE IF NOT EXISTS jobs
 (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, job TEXT, city TEXT, details TEXT, status TEXT, created TIMESTAMP, created_date TEXT)""")
-conn.commit()
-
-# اصلاح للملف القديم اللي عامل الخطأ في صورتك
 try:
     conn.execute("ALTER TABLE jobs ADD COLUMN created_date TEXT")
     conn.commit()
-    print("تم تحديث قاعدة البيانات ✅")
-except Exception as e:
-    print(f"قاعدة البيانات جاهزة: {e}")
-
+except:
+    pass
 conn.commit()
 
 user_temp = {}
@@ -250,5 +262,18 @@ def handle_admin(call):
         bot.send_message(uid, "❌ تم الرفض")
         bot.edit_message_text(f"تم الرفض ❌ #{jid}", call.message.chat.id, call.message.message_id)
 
-print(f"البوت شغال ✅ ADMIN={ADMIN_ID}")
-bot.infinity_polling(skip_pending=True)
+# === التشغيل مع حماية من انقطاع الانترنت ===
+def start_bot():
+    print(f"البوت شغال ✅ ADMIN={ADMIN_ID}")
+    while True:
+        try:
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"اعادة تشغيل بعد خطأ: {e}")
+            continue
+
+if __name__ == "__main__":
+    # شغل الويب في ثريد منفصل
+    threading.Thread(target=run_web, daemon=True).start()
+    # شغل البوت
+    start_bot()
